@@ -268,16 +268,15 @@ class PTR(BaseModel):
         ######################## Your code here ########################
         T, B, N, H = agents_emb.shape
 
-        agents_emb = agents_emb.transpose(0, 1)
-        agents_emb = self.pos_encoder(agents_emb)
-        agents_emb = agents_emb.transpose(0, 1)
+        temp_masks = agent_masks.permute(0, 2, 1).reshape(-1, T)
 
-        agents_emb = agents_emb.permute(1, 0, 2, 3).reshape(B * T, N, H)
-        agent_masks = agent_masks.permute(0, 1, 2).reshape(B * T, N)
+        temp_masks[:, -1][temp_masks.sum(-1) == T] = False  #avoid NAN error
 
-        attn_output = layer(agents_emb, agents_emb, src_key_padding_mask=agent_masks)
+        agents_emb = self.pos_encoder(agents_emb.reshape(T, B * (N), -1))
 
-        agents_emb = attn_output.reshape(B, T, N, H).permute(1, 0, 2, 3)
+        agents_emb = layer(agents_emb, src_key_padding_mask=temp_masks)
+
+        agents_emb = agents_emb.view(T, B, N, -1)
         ################################################################
         return agents_emb
 
@@ -293,14 +292,12 @@ class PTR(BaseModel):
         ######################## Your code here ########################
         T, B, N, H = agents_emb.shape
 
-        agents_emb = self.pos_encoder(agents_emb)
+        agents_emb = agents_emb.permute(2, 1, 0, 3).reshape(N, B * T, H)
 
-        agents_emb = agents_emb.permute(1, 0, 2, 3).reshape(B * T, N, H)
-        agent_masks = agent_masks.permute(0, 1, 2).reshape(B * T, N)
+        agent_masks = agent_masks.reshape(B * T, N)
+        agents_emb = layer(agents_emb, src_key_padding_mask=agent_masks)
+        agents_emb = agents_emb.view(N, B, T, H).permute(2, 1, 0, 3)
 
-        attn_output = layer(agents_emb, agents_emb, src_key_padding_mask=agent_masks)
-
-        agents_emb = attn_output.reshape(B, T, N, H).permute(1, 0, 2, 3)
         ################################################################
         return agents_emb
 
@@ -328,11 +325,9 @@ class PTR(BaseModel):
 
         ######################## Your code here ########################
         # Apply temporal attention layers and then the social attention layers on agents_emb, each for L_enc times.
-        for _ in range(self.L_enc):
-            agents_emb = self.temporal_attn_fn(agents_emb, opps_masks, self.temporal_attn_layers)
-
-        for _ in range(self.L_enc):
-            agents_emb = self.social_attn_fn(agents_emb, opps_masks, self.social_attn_layers)
+        for i in range(self.L_enc):
+            agents_emb = self.temporal_attn_fn(agents_emb, opps_masks, layer=self.temporal_attn_layers[i])
+            agents_emb = self.social_attn_fn(agents_emb, opps_masks, layer=self.social_attn_layers[i])
         ################################################################
 
         ego_soctemp_emb = agents_emb[:, :, 0]  # take ego-agent encodings only.
