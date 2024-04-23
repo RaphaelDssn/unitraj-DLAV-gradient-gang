@@ -124,8 +124,6 @@ class PositionalEncoding(nn.Module):
         self.register_parameter('pe', nn.Parameter(pe, requires_grad=False))
 
     def forward(self, x):
-        print("x:", x.size())
-        print("+: ",self.pe[:x.size(0), :].size() )
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
@@ -272,11 +270,11 @@ class PTR(BaseModel):
 
         temp_masks[:, -1][temp_masks.sum(-1) == T] = False  #avoid NAN error
 
-        agents_emb = self.pos_encoder(agents_emb.reshape(T, B * (N), -1))
+        agents_emb = self.pos_encoder(agents_emb.reshape(T, B * N, H))
 
         agents_emb = layer(agents_emb, src_key_padding_mask=temp_masks)
 
-        agents_emb = agents_emb.view(T, B, N, -1)
+        agents_emb = agents_emb.view(T, B, N, H)
         ################################################################
         return agents_emb
 
@@ -296,6 +294,7 @@ class PTR(BaseModel):
 
         agent_masks = agent_masks.reshape(B * T, N)
         agents_emb = layer(agents_emb, src_key_padding_mask=agent_masks)
+        
         agents_emb = agents_emb.view(N, B, T, H).permute(2, 1, 0, 3)
 
         ################################################################

@@ -33,7 +33,7 @@ def evaluation(cfg):
         inference_mode=True,
         logger= None if cfg.debug else WandbLogger(project="motionnet", name=cfg.exp_name),
         devices=1,
-        accelerator="cpu" if cfg.debug else "gpu",
+        accelerator= "cpu" if cfg.debug else "gpu",
         profiler="simple",
     )
 

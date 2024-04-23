@@ -1,0 +1,23 @@
+Restoring states from the checkpoint path at ['/lightning_logs/version_17/checkpoints/epoch=99-val/brier_fde=9.34.ckpt']
+Error executing job with overrides: []
+Traceback (most recent call last):
+  File "C:\Users\diana\Desktop\Project dlav\unitraj-DLAV-gradient-gang\motionnet\evaluation.py", line 40, in evaluation
+    trainer.validate(model=model, dataloaders=val_loader,ckpt_path=cfg.ckpt_path)
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\pytorch_lightning\trainer\trainer.py", line 645, in validate
+    return call._call_and_handle_interrupt(
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\pytorch_lightning\trainer\call.py", line 44, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\pytorch_lightning\trainer\trainer.py", line 685, in _validate_impl
+    results = self._run(model, ckpt_path=ckpt_path)
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\pytorch_lightning\trainer\trainer.py", line 956, in _run
+    self._checkpoint_connector._restore_modules_and_callbacks(ckpt_path)
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\pytorch_lightning\trainer\connectors\checkpoint_connector.py", line 397, in _restore_modules_and_callbacks
+    self.resume_start(checkpoint_path)
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\pytorch_lightning\trainer\connectors\checkpoint_connector.py", line 79, in resume_start
+    loaded_checkpoint = self.trainer.strategy.load_checkpoint(checkpoint_path)
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\pytorch_lightning\strategies\strategy.py", line 368, in load_checkpoint
+    return self.checkpoint_io.load_checkpoint(checkpoint_path)
+  File "C:\Users\diana\anaconda3\envs\dlav\lib\site-packages\lightning_fabric\plugins\io\torch_io.py", line 81, in load_checkpoint
+    raise FileNotFoundError(f"Checkpoint file not found: {path}")
+FileNotFoundError: Checkpoint file not found: ['/lightning_logs/version_17/checkpoints/epoch=99-val/brier_fde=9.34.ckpt']
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

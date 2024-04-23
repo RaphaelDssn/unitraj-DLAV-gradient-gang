@@ -1,0 +1,53 @@
+{
+    "os": "Windows-10-10.0.22631-SP0",
+    "python": "3.10.14",
+    "heartbeatAt": "2024-04-23T11:40:01.694501",
+    "startedAt": "2024-04-23T11:39:58.630676",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "C:\\Users\\diana\\Desktop\\Project dlav\\unitraj-DLAV-gradient-gang\\motionnet\\evaluation.py",
+    "codePathLocal": "evaluation.py",
+    "codePath": "motionnet\\evaluation.py",
+    "git": {
+        "remote": "https://github.com/RaphaelDssn/unitraj-DLAV-gradient-gang.git",
+        "commit": "677d2e1bf7e22fa7f051418f16763ef47b7d14c7"
+    },
+    "email": null,
+    "root": "C:/Users/diana/Desktop/Project dlav/unitraj-DLAV-gradient-gang",
+    "host": "DESKTOP-37O604U",
+    "username": "diana",
+    "executable": "C:\\Users\\diana\\anaconda3\\envs\\dlav\\python.exe",
+    "cpu_count": 4,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 2301.0,
+        "min": 0.0,
+        "max": 2301.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2301.0,
+            "min": 0.0,
+            "max": 2301.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 222.69823837280273,
+            "used": 108.17644500732422
+        }
+    },
+    "gpu": "NVIDIA GeForce GTX 1060",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce GTX 1060",
+            "memory_total": 6442450944
+        }
+    ],
+    "memory": {
+        "total": 15.848831176757812
+    }
+}
