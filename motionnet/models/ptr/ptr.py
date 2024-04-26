@@ -266,11 +266,11 @@ class PTR(BaseModel):
         ######################## Your code here ########################
         T, B, N, H = agents_emb.shape
 
-        temp_masks = agent_masks.permute(0, 2, 1).reshape(-1, T)
+        temp_masks = agent_masks.permute(0, 2, 1).reshape(B*N, T) #everyone for each time step
 
         temp_masks[:, -1][temp_masks.sum(-1) == T] = False  #avoid NAN error
 
-        agents_emb = self.pos_encoder(agents_emb.reshape(T, B * N, H))
+        agents_emb = self.pos_encoder(agents_emb.reshape(T, B * N, H)) #keep time sequence correctly
 
         agents_emb = layer(agents_emb, src_key_padding_mask=temp_masks)
 
@@ -290,7 +290,7 @@ class PTR(BaseModel):
         ######################## Your code here ########################
         T, B, N, H = agents_emb.shape
 
-        agents_emb = agents_emb.permute(2, 1, 0, 3).reshape(N, B * T, H)
+        agents_emb = agents_emb.permute(2, 1, 0, 3).reshape(N, B * T, H) #all time steps of each agent
 
         agent_masks = agent_masks.reshape(B * T, N)
         agents_emb = layer(agents_emb, src_key_padding_mask=agent_masks)

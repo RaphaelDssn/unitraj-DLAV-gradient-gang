@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     if args.debug:
         trainer = pl.Trainer(
-            devices=1, accelerator='cpu', profiler="simple", inference_mode=True
+            devices=1, accelerator='gpu', profiler="simple", inference_mode=True
         )
     else:
         trainer = pl.Trainer(

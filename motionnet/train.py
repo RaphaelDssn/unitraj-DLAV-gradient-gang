@@ -62,6 +62,50 @@ def train(cfg):
 
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader,ckpt_path=cfg.ckpt_path)
 
+""" def grid_search(config):
+    # Define hyperparameter grid
+    param_grid = {
+        'method.learning_rate': [0.001, 0.01, 0.1],
+        'method.dropout': [0.1, 0.2, 0.3],
+        'method.max_epochs': [50, 100, 150],
+        'method.train_batch_size': [64, 128, 256],
+        'method.eval_batch_size': [128, 256, 512],
+        # Add other hyperparameters to tune here
+    }
+
+    # Perform grid search
+    best_score = float('inf')  # Initialize with high value for minimization problem
+    best_params = None
+
+    for params in itertools.product(*[param_grid[key] for key in param_grid]):
+        # Update config with current hyperparameters
+        cfg = OmegaConf.merge(config, {'method': {key.split('.')[1]: val for key, val in zip(param_grid.keys(), params)}})
+        
+        # Train and evaluate model
+        train(cfg)
+        
+        # Get validation score (you can use any validation metric here)
+        val_score = ...  # Compute validation score
+        
+        # Track best hyperparameters
+        if val_score < best_score:
+            best_score = val_score
+            best_params = params
+
+    print("Best hyperparameters:", best_params)
+    print("Best validation score:", best_score)
+
+    # Train final model with best hyperparameters
+    cfg = OmegaConf.merge(config, {'method': {key.split('.')[1]: val for key, val in zip(param_grid.keys(), best_params)}})
+    train(cfg)
+
+if __name__ == '__main__':
+    # Load config
+    cfg = OmegaConf.load(hydra.utils.get_original_cwd() + "/configs/config.yaml")
+    
+    # Perform grid search
+    grid_search(cfg) """
+
 if __name__ == '__main__':
     train()
 
