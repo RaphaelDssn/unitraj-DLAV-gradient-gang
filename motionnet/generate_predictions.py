@@ -59,7 +59,7 @@ def generate_predictions(cfg):
             predictions.extend(output['predicted_trajectory'].cpu().numpy()[..., :2])
 
     # Save predictions to a csv file for submission
-    with open("submission.csv", mode='w', newline='') as file:
+    with open("submission_{0}.csv".format(cfg.exp_name), mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Pred_ID', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'x4', 'y4', 'x5', 'y5', 'x6', 'y6'])
         for i, pred in enumerate(predictions):
