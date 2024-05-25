@@ -299,6 +299,7 @@ class PTR(BaseModel):
 
         ################################################################
         return agents_emb
+    
 
     def _forward(self, inputs):
         '''

@@ -1,7 +1,9 @@
 from .ptr_dataset import PTRDataset
+from .hpnet_dataset import HPNetDataset
 
 __all__ = {
     'ptr': PTRDataset,
+    'hpnet': HPNetDataset,
 }
 
 def build_dataset(config,val=False, noise=False):

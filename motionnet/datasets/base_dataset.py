@@ -438,7 +438,6 @@ class BaseDataset(Dataset):
         batch_list = []
         for batch in data_list:
             batch_list += batch
-
         batch_size = len(batch_list)
         key_to_list = {}
         for key in batch_list[0].keys():

@@ -20,13 +20,12 @@ def train(cfg):
     cfg = OmegaConf.merge(cfg, cfg.method)
 
     model = build_model(cfg)
-
-    train_set_or = build_dataset(cfg)
-    train_set_noisy = build_dataset(cfg,noise=True)
-    train_set = ConcatDataset([train_set_or, train_set_noisy])
+    train_set = build_dataset(cfg)
+    #train_set_noisy = build_dataset(cfg,noise=True)
+    #train_set = ConcatDataset([train_set_or, train_set_noisy])
     val_set = build_dataset(cfg,val=True)
 
-    train_batch_size = max(cfg.method['train_batch_size'] // len(cfg.devices) // train_set_or.data_chunk_size,1)
+    train_batch_size = max(cfg.method['train_batch_size'] // len(cfg.devices) // train_set.data_chunk_size,1)
     eval_batch_size = max(cfg.method['eval_batch_size'] // len(cfg.devices) // val_set.data_chunk_size,1)
 
     call_backs = []
@@ -41,20 +40,20 @@ def train(cfg):
 
     call_backs.append(checkpoint_callback)
 
-    train_loader = DataLoader(
+    train_loader= DataLoader(
         train_set, batch_size=train_batch_size, num_workers=cfg.load_num_workers, drop_last=False,
-    collate_fn=train_set_or.collate_fn)
-
+    collate_fn=train_set.collate_fn)
+    
     val_loader = DataLoader(
         val_set, batch_size=eval_batch_size, num_workers=cfg.load_num_workers, shuffle=False, drop_last=False,
-    collate_fn=train_set_or.collate_fn)
+    collate_fn=train_set.collate_fn)
 
     trainer = pl.Trainer(
         max_epochs=cfg.method.max_epochs,
         logger= None if cfg.debug else WandbLogger(project="motionnet", name=cfg.exp_name),
         devices=1 if cfg.debug else cfg.devices,
         gradient_clip_val=cfg.method.grad_clip_norm,
-        accelerator= "gpu", #"cpu" if cfg.debug else "gpu",
+        accelerator= "cpu" if cfg.debug else "gpu",
         profiler="simple",
         strategy="auto" if cfg.debug else "ddp",
         callbacks=call_backs
