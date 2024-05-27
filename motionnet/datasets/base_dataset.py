@@ -450,8 +450,8 @@ class BaseDataset(Dataset):
                 input_dict[key] = torch.from_numpy(np.stack(val_list, axis=0))
             except:
                 input_dict[key] = val_list
-
-        input_dict['center_objects_type'] = input_dict['center_objects_type'].numpy()
+        if 'center_objects_type' in input_dict:
+            input_dict['center_objects_type'] = input_dict['center_objects_type'].numpy()
 
         batch_dict = {'batch_size': batch_size, 'input_dict': input_dict, 'batch_sample_count': batch_size}
         return batch_dict

@@ -2,8 +2,8 @@
 model_name: hpnet
 num_modes: 6
 hidden_dim: 128
-num_historical_steps: 20
-num_future_steps: 30
+num_historical_steps: 21 #20
+num_future_steps: 60 #30
 pos_duration: 20
 pred_duration: 20
 a2a_radius: 50

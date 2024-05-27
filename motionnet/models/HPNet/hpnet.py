@@ -9,39 +9,8 @@ from torch_geometric.nn.conv import MessagePassing
 from torchmetrics import Metric
 import math
 from motionnet.models.base_model.base_model import BaseModel
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, List
 import json
-
-
-### ----------------------------------- Transform input data ----------------------------------- ### 
-def get_heading(cos):
-    heading = np.arccos(cos)
-    return heading
-def get_centerline(lines, agent):
-    """
-    in a specific scenario, at a specific time step
-    lines: map_polylines[scenario]
-    agent: obj_trajs[scenario][0][timestep]
-    """
-    des_x = agent[0] - 1.3 * agent[34]
-    des_y = agent[1] + 1.3 * agent[33]
-    
-    centerline=[]
-    best_dist_x = np.inf
-    best_dist_y = np.inf
-    for i in range(len(lines)):
-        for j in range(len(lines[i])):
-            line_x = lines[i][j][0]
-            line_y = lines[i][j][1]
-            if (abs(line_x-des_x)<best_dist_x):
-                best_dist_x=abs(line_x-des_x)
-    #getcenterline
-    return centerline
-def get_features(data):
-    feat_dict={}
-    #center_dict={"length":}
-    #new_dict['centerline']=
-    return feat_dict
 
 
 ### ----------------------------------- Original Methods ----------------------------------- ### 
@@ -364,17 +333,17 @@ class Backbone(nn.Module):
 
     def forward(self, data, l_embs: torch.Tensor) -> torch.Tensor:
         # initialization
-        a_length = data['agent']['length']                          #[(N1,...,Nb),H]
+        a_length = data['agent'][0]['length']                          #[(N1,...,Nb),H]
         a_embs = self.a_emb_layer(input=a_length.unsqueeze(-1))    #[(N1,...,Nb),H,D]
         
         num_all_agent = a_length.size(0)                # N1+...+Nb
         m_embs = self.mode_tokens.weight.unsqueeze(0).repeat_interleave(self.num_historical_steps,0)            #[H,K,D]
         m_embs = m_embs.unsqueeze(0).repeat_interleave(num_all_agent,0).reshape(-1, self.hidden_dim)            #[(N1,...,Nb)*H*K,D]
 
-        m_batch = data['agent']['batch'].unsqueeze(1).repeat_interleave(self.num_modes,1)                       # [(N1,...,Nb),K]
-        m_position = data['agent']['position'][:,:self.num_historical_steps].unsqueeze(2).repeat_interleave(self.num_modes,2)  #[(N1,...,Nb),H,K,2]
-        m_heading = data['agent']['heading'].unsqueeze(2).repeat_interleave(self.num_modes,2)                   #[(N1,...,Nb),H,K]
-        m_valid_mask = data['agent']['visible_mask'][:,:self.num_historical_steps].unsqueeze(2).repeat_interleave(self.num_modes,2)  #[(N1,...,Nb),H,K]
+        m_batch = data['agent'][0]['batch'].unsqueeze(1).repeat_interleave(self.num_modes,1)                       # [(N1,...,Nb),K]
+        m_position = data['agent'][0]['position'][:,:self.num_historical_steps].unsqueeze(2).repeat_interleave(self.num_modes,2)  #[(N1,...,Nb),H,K,2]
+        m_heading = data['agent'][0]['heading'].unsqueeze(2).repeat_interleave(self.num_modes,2)                   #[(N1,...,Nb),H,K]
+        m_valid_mask = data['agent'][0]['visible_mask'][:,:self.num_historical_steps].unsqueeze(2).repeat_interleave(self.num_modes,2)  #[(N1,...,Nb),H,K]
 
         #ALL EDGE
         #t2m edge
@@ -400,36 +369,36 @@ class Backbone(nn.Module):
         l2m_position_m = m_position.reshape(-1,2)                       #[(N1,...,Nb)*H*K,2]
         l2m_heading_l = data['lane']['heading']                         #[(M1,...,Mb)]
         l2m_heading_m = m_heading.reshape(-1)                           #[(N1,...,Nb)]
-        l2m_batch_l = data['lane']['batch']                             #[(M1,...,Mb)]
-        l2m_batch_m = m_batch.unsqueeze(1).repeat_interleave(self.num_historical_steps,1).reshape(-1)       #[(N1,...,Nb)*H*K]
-        l2m_valid_mask_l = data['lane']['visible_mask']                                                     #[(M1,...,Mb)]
+        #l2m_batch_l = data['lane']['batch']                             #[(M1,...,Mb)]
+        #l2m_batch_m = m_batch.unsqueeze(1).repeat_interleave(self.num_historical_steps,1).reshape(-1)       #[(N1,...,Nb)*H*K]
+        #l2m_valid_mask_l = data['lane']['visible_mask']                                                     #[(M1,...,Mb)]
         l2m_valid_mask_m = m_valid_mask.reshape(-1)                                                         #[(N1,...,Nb)*H*K]
-        l2m_valid_mask = l2m_valid_mask_l.unsqueeze(1)&l2m_valid_mask_m.unsqueeze(0)                        #[(M1,...,Mb),(N1,...,Nb)*H*K]
-        l2m_valid_mask = drop_edge_between_samples(l2m_valid_mask, batch=(l2m_batch_l, l2m_batch_m))
-        l2m_edge_index = dense_to_sparse(l2m_valid_mask)[0]
-        l2m_edge_index = l2m_edge_index[:, torch.norm(l2m_position_l[l2m_edge_index[0]] - l2m_position_m[l2m_edge_index[1]], p=2, dim=-1) < self.l2a_radius]
-        l2m_edge_vector = transform_point_to_local_coordinate(l2m_position_l[l2m_edge_index[0]], l2m_position_m[l2m_edge_index[1]], l2m_heading_m[l2m_edge_index[1]])
-        l2m_edge_attr_length, l2m_edge_attr_theta = compute_angles_lengths_2D(l2m_edge_vector)
-        l2m_edge_attr_heading = wrap_angle(l2m_heading_l[l2m_edge_index[0]] - l2m_heading_m[l2m_edge_index[1]])
-        l2m_edge_attr_input = torch.stack([l2m_edge_attr_length, l2m_edge_attr_theta, l2m_edge_attr_heading], dim=-1)
-        l2m_edge_attr_embs = self.l2m_emb_layer(input=l2m_edge_attr_input)
+        #l2m_valid_mask = l2m_valid_mask_l.unsqueeze(1)&l2m_valid_mask_m.unsqueeze(0)                        #[(M1,...,Mb),(N1,...,Nb)*H*K]
+        #l2m_valid_mask = drop_edge_between_samples(l2m_valid_mask, batch=(l2m_batch_l, l2m_batch_m))
+        #l2m_edge_index = dense_to_sparse(l2m_valid_mask)[0]
+        #l2m_edge_index = l2m_edge_index[:, torch.norm(l2m_position_l[l2m_edge_index[0]] - l2m_position_m[l2m_edge_index[1]], p=2, dim=-1) < self.l2a_radius]
+        #l2m_edge_vector = transform_point_to_local_coordinate(l2m_position_l[l2m_edge_index[0]], l2m_position_m[l2m_edge_index[1]], l2m_heading_m[l2m_edge_index[1]])
+        #l2m_edge_attr_length, l2m_edge_attr_theta = compute_angles_lengths_2D(l2m_edge_vector)
+        #l2m_edge_attr_heading = wrap_angle(l2m_heading_l[l2m_edge_index[0]] - l2m_heading_m[l2m_edge_index[1]])
+        #l2m_edge_attr_input = torch.stack([l2m_edge_attr_length, l2m_edge_attr_theta, l2m_edge_attr_heading], dim=-1)
+        #l2m_edge_attr_embs = self.l2m_emb_layer(input=l2m_edge_attr_input)
 
         #mode edge
         #m2m_a_edge
         m2m_a_position = m_position.permute(1,2,0,3).reshape(-1, 2)    #[H*K*(N1,...,Nb),2]
         m2m_a_heading = m_heading.permute(1,2,0).reshape(-1)           #[H*K*(N1,...,Nb)]
-        m2m_a_batch = data['agent']['batch']                           #[(N1,...,Nb)]
+        #m2m_a_batch = data['agent']['batch']                           #[(N1,...,Nb)]
         m2m_a_valid_mask = m_valid_mask.permute(1,2,0).reshape(self.num_historical_steps * self.num_modes, -1)  #[H*K,(N1,...,Nb)]
         m2m_a_valid_mask = m2m_a_valid_mask.unsqueeze(2) & m2m_a_valid_mask.unsqueeze(1)                        #[H*K,(N1,...,Nb),(N1,...,Nb)]
-        m2m_a_valid_mask = drop_edge_between_samples(m2m_a_valid_mask, m2m_a_batch)
-        m2m_a_edge_index = dense_to_sparse(m2m_a_valid_mask)[0]
-        m2m_a_edge_index = m2m_a_edge_index[:, m2m_a_edge_index[1] != m2m_a_edge_index[0]]
-        m2m_a_edge_index = m2m_a_edge_index[:, torch.norm(m2m_a_position[m2m_a_edge_index[1]] - m2m_a_position[m2m_a_edge_index[0]],p=2,dim=-1) < self.a2a_radius]
-        m2m_a_edge_vector = transform_point_to_local_coordinate(m2m_a_position[m2m_a_edge_index[0]], m2m_a_position[m2m_a_edge_index[1]], m2m_a_heading[m2m_a_edge_index[1]])
-        m2m_a_edge_attr_length, m2m_a_edge_attr_theta = compute_angles_lengths_2D(m2m_a_edge_vector)
-        m2m_a_edge_attr_heading = wrap_angle(m2m_a_heading[m2m_a_edge_index[0]] - m2m_a_heading[m2m_a_edge_index[1]])
-        m2m_a_edge_attr_input = torch.stack([m2m_a_edge_attr_length, m2m_a_edge_attr_theta, m2m_a_edge_attr_heading], dim=-1)
-        m2m_a_edge_attr_embs = self.m2m_a_emb_layer(input=m2m_a_edge_attr_input)
+        #m2m_a_valid_mask = drop_edge_between_samples(m2m_a_valid_mask, m2m_a_batch)
+        #m2m_a_edge_index = dense_to_sparse(m2m_a_valid_mask)[0]
+        #m2m_a_edge_index = m2m_a_edge_index[:, m2m_a_edge_index[1] != m2m_a_edge_index[0]]
+        #m2m_a_edge_index = m2m_a_edge_index[:, torch.norm(m2m_a_position[m2m_a_edge_index[1]] - m2m_a_position[m2m_a_edge_index[0]],p=2,dim=-1) < self.a2a_radius]
+        #m2m_a_edge_vector = transform_point_to_local_coordinate(m2m_a_position[m2m_a_edge_index[0]], m2m_a_position[m2m_a_edge_index[1]], m2m_a_heading[m2m_a_edge_index[1]])
+        #m2m_a_edge_attr_length, m2m_a_edge_attr_theta = compute_angles_lengths_2D(m2m_a_edge_vector)
+        #m2m_a_edge_attr_heading = wrap_angle(m2m_a_heading[m2m_a_edge_index[0]] - m2m_a_heading[m2m_a_edge_index[1]])
+        #m2m_a_edge_attr_input = torch.stack([m2m_a_edge_attr_length, m2m_a_edge_attr_theta, m2m_a_edge_attr_heading], dim=-1)
+        #m2m_a_edge_attr_embs = self.m2m_a_emb_layer(input=m2m_a_edge_attr_input)
 
         #m2m_h                        
         m2m_h_position = m_position.permute(2,0,1,3).reshape(-1, 2)    #[K*(N1,...,Nb)*H,2]
@@ -458,15 +427,15 @@ class Backbone(nn.Module):
         m_embs_t = self.t2m_attn_layer(x = [t_embs, m_embs], edge_index = t2m_edge_index, edge_attr = t2m_edge_attr_embs)         #[(N1,...,Nb)*H*K,D]
 
         #l2m attention
-        m_embs_l = self.l2m_attn_layer(x = [l_embs, m_embs], edge_index = l2m_edge_index, edge_attr = l2m_edge_attr_embs)         #[(N1,...,Nb)*H*K,D]
+        #m_embs_l = self.l2m_attn_layer(x = [l_embs, m_embs], edge_index = l2m_edge_index, edge_attr = l2m_edge_attr_embs)         #[(N1,...,Nb)*H*K,D]
         
-        m_embs = m_embs_t + m_embs_l
+        m_embs = m_embs_t #+ m_embs_l
         m_embs = m_embs.reshape(num_all_agent, self.num_historical_steps, self.num_modes, self.hidden_dim).transpose(0,1).reshape(-1,self.hidden_dim)       #[H*(N1,...,Nb)*K,D]
         #moda attention  
         for i in range(self.num_attn_layers):
             #m2m_a
             m_embs = m_embs.reshape(self.num_historical_steps, num_all_agent, self.num_modes, self.hidden_dim).transpose(1,2).reshape(-1, self.hidden_dim)  #[H*K*(N1,...,Nb),D]
-            m_embs = self.m2m_a_attn_layers[i](x = m_embs, edge_index = m2m_a_edge_index, edge_attr = m2m_a_edge_attr_embs)
+            #m_embs = self.m2m_a_attn_layers[i](x = m_embs, edge_index = m2m_a_edge_index, edge_attr = m2m_a_edge_attr_embs)
             #m2m_h
             m_embs = m_embs.reshape(self.num_historical_steps, self.num_modes, num_all_agent, self.hidden_dim).permute(1,2,0,3).reshape(-1, self.hidden_dim)  #[K*(N1,...,Nb)*H,D]
             m_embs = self.m2m_h_attn_layers[i](x = m_embs, edge_index = m2m_h_edge_index, edge_attr = m2m_h_edge_attr_embs)
@@ -482,7 +451,7 @@ class Backbone(nn.Module):
         #generate anchor
         proposal = traj_propose.detach()        #[(N1,...,Nb),H,K,F,2]
         
-        n_batch = m_batch                                                                                                                                             #[(N1,...,Nb),K]
+        #n_batch = m_batch                                                                                                                                             #[(N1,...,Nb),K]
         n_position = proposal[:,:,:, self.num_future_steps // 2,:]                                                                                                    #[(N1,...,Nb),H,K,2]
         _, n_heading = compute_angles_lengths_2D(proposal[:,:,:, self.num_future_steps // 2,:] - proposal[:,:,:, (self.num_future_steps // 2) - 1,:])                 #[(N1,...,Nb),H,K]
         n_valid_mask = m_valid_mask                                                                                                                                   #[(N1,...,Nb),H,K]
@@ -514,36 +483,36 @@ class Backbone(nn.Module):
         l2n_position_n = n_position.reshape(-1,2)                       #[(N1,...,Nb)*H*K,2]
         l2n_heading_l = data['lane']['heading']                         #[(M1,...,Mb)]
         l2n_heading_n = n_heading.reshape(-1)                           #[(N1,...,Nb)*H*K]
-        l2n_batch_l = data['lane']['batch']                             #[(M1,...,Mb)]
-        l2n_batch_n = n_batch.unsqueeze(1).repeat_interleave(self.num_historical_steps,1).reshape(-1)       #[(N1,...,Nb)*H*K]
-        l2n_valid_mask_l = data['lane']['visible_mask']                                                     #[(M1,...,Mb)]
+        #l2n_batch_l = data['lane']['batch']                             #[(M1,...,Mb)]
+        #l2n_batch_n = n_batch.unsqueeze(1).repeat_interleave(self.num_historical_steps,1).reshape(-1)       #[(N1,...,Nb)*H*K]
+        #l2n_valid_mask_l = data['lane']['visible_mask']                                                     #[(M1,...,Mb)]
         l2n_valid_mask_n = n_valid_mask.reshape(-1)                                                         #[(N1,...,Nb)*H*K]
-        l2n_valid_mask = l2n_valid_mask_l.unsqueeze(1) & l2n_valid_mask_n.unsqueeze(0)                      #[(M1,...,Mb),(N1,...,Nb)*H*K]
-        l2n_valid_mask = drop_edge_between_samples(l2n_valid_mask, batch=(l2n_batch_l, l2n_batch_n))
-        l2n_edge_index = dense_to_sparse(l2n_valid_mask)[0]
-        l2n_edge_index = l2n_edge_index[:, torch.norm(l2n_position_l[l2n_edge_index[0]] - l2n_position_n[l2n_edge_index[1]], p=2, dim=-1) < self.l2a_radius]
-        l2n_edge_vector = transform_point_to_local_coordinate(l2n_position_l[l2n_edge_index[0]], l2n_position_n[l2n_edge_index[1]], l2n_heading_n[l2n_edge_index[1]])
-        l2n_edge_attr_length, l2n_edge_attr_theta = compute_angles_lengths_2D(l2n_edge_vector)
-        l2n_edge_attr_heading = wrap_angle(l2n_heading_l[l2n_edge_index[0]] - l2n_heading_n[l2n_edge_index[1]])
-        l2n_edge_attr_input = torch.stack([l2n_edge_attr_length, l2n_edge_attr_theta, l2n_edge_attr_heading], dim=-1)
-        l2n_edge_attr_embs = self.l2m_emb_layer(input = l2n_edge_attr_input)
+        #l2n_valid_mask = l2n_valid_mask_l.unsqueeze(1) & l2n_valid_mask_n.unsqueeze(0)                      #[(M1,...,Mb),(N1,...,Nb)*H*K]
+        #l2n_valid_mask = drop_edge_between_samples(l2n_valid_mask, batch=(l2n_batch_l, l2n_batch_n))
+        #l2n_edge_index = dense_to_sparse(l2n_valid_mask)[0]
+        #l2n_edge_index = l2n_edge_index[:, torch.norm(l2n_position_l[l2n_edge_index[0]] - l2n_position_n[l2n_edge_index[1]], p=2, dim=-1) < self.l2a_radius]
+        #l2n_edge_vector = transform_point_to_local_coordinate(l2n_position_l[l2n_edge_index[0]], l2n_position_n[l2n_edge_index[1]], l2n_heading_n[l2n_edge_index[1]])
+        #l2n_edge_attr_length, l2n_edge_attr_theta = compute_angles_lengths_2D(l2n_edge_vector)
+        #l2n_edge_attr_heading = wrap_angle(l2n_heading_l[l2n_edge_index[0]] - l2n_heading_n[l2n_edge_index[1]])
+        #l2n_edge_attr_input = torch.stack([l2n_edge_attr_length, l2n_edge_attr_theta, l2n_edge_attr_heading], dim=-1)
+        #l2n_edge_attr_embs = self.l2m_emb_layer(input = l2n_edge_attr_input)
 
         #mode edge
         #n2n_a_edge
         n2n_a_position = n_position.permute(1,2,0,3).reshape(-1, 2)    #[H*K*(N1,...,Nb),2]
         n2n_a_heading = n_heading.permute(1,2,0).reshape(-1)           #[H*K*(N1,...,Nb)]
-        n2n_a_batch = data['agent']['batch']                           #[(N1,...,Nb)]
+        #n2n_a_batch = data['agent']['batch']                           #[(N1,...,Nb)]
         n2n_a_valid_mask = n_valid_mask.permute(1,2,0).reshape(self.num_historical_steps * self.num_modes, -1)   #[H*K,(N1,...,Nb)]
         n2n_a_valid_mask = n2n_a_valid_mask.unsqueeze(2) & n2n_a_valid_mask.unsqueeze(1)        #[H*K,(N1,...,Nb),(N1,...,Nb)]
-        n2n_a_valid_mask = drop_edge_between_samples(n2n_a_valid_mask, n2n_a_batch)
-        n2n_a_edge_index = dense_to_sparse(n2n_a_valid_mask)[0]
-        n2n_a_edge_index = n2n_a_edge_index[:, n2n_a_edge_index[1] != n2n_a_edge_index[0]]
-        n2n_a_edge_index = n2n_a_edge_index[:, torch.norm(n2n_a_position[n2n_a_edge_index[1]] - n2n_a_position[n2n_a_edge_index[0]],p=2,dim=-1) < self.a2a_radius]
-        n2n_a_edge_vector = transform_point_to_local_coordinate(n2n_a_position[n2n_a_edge_index[0]], n2n_a_position[n2n_a_edge_index[1]], n2n_a_heading[n2n_a_edge_index[1]])
-        n2n_a_edge_attr_length, n2n_a_edge_attr_theta = compute_angles_lengths_2D(n2n_a_edge_vector)
-        n2n_a_edge_attr_heading = wrap_angle(n2n_a_heading[n2n_a_edge_index[0]] - n2n_a_heading[n2n_a_edge_index[1]])
-        n2n_a_edge_attr_input = torch.stack([n2n_a_edge_attr_length, n2n_a_edge_attr_theta, n2n_a_edge_attr_heading], dim=-1)
-        n2n_a_edge_attr_embs = self.m2m_a_emb_layer(input=n2n_a_edge_attr_input)
+        #n2n_a_valid_mask = drop_edge_between_samples(n2n_a_valid_mask, n2n_a_batch)
+        #n2n_a_edge_index = dense_to_sparse(n2n_a_valid_mask)[0]
+        #n2n_a_edge_index = n2n_a_edge_index[:, n2n_a_edge_index[1] != n2n_a_edge_index[0]]
+        #n2n_a_edge_index = n2n_a_edge_index[:, torch.norm(n2n_a_position[n2n_a_edge_index[1]] - n2n_a_position[n2n_a_edge_index[0]],p=2,dim=-1) < self.a2a_radius]
+        #n2n_a_edge_vector = transform_point_to_local_coordinate(n2n_a_position[n2n_a_edge_index[0]], n2n_a_position[n2n_a_edge_index[1]], n2n_a_heading[n2n_a_edge_index[1]])
+        #n2n_a_edge_attr_length, n2n_a_edge_attr_theta = compute_angles_lengths_2D(n2n_a_edge_vector)
+        #n2n_a_edge_attr_heading = wrap_angle(n2n_a_heading[n2n_a_edge_index[0]] - n2n_a_heading[n2n_a_edge_index[1]])
+        #n2n_a_edge_attr_input = torch.stack([n2n_a_edge_attr_length, n2n_a_edge_attr_theta, n2n_a_edge_attr_heading], dim=-1)
+        #n2n_a_edge_attr_embs = self.m2m_a_emb_layer(input=n2n_a_edge_attr_input)
 
         #n2n_h edge                        
         n2n_h_position = n_position.permute(2,0,1,3).reshape(-1, 2)    #[K*(N1,...,Nb)*H,2]
@@ -578,15 +547,15 @@ class Backbone(nn.Module):
         n_embs_t = self.t2n_attn_layer(x = [t_embs, n_embs], edge_index = t2n_edge_index, edge_attr = t2n_edge_attr_embs)         #[(N1,...,Nb)*H*K,D]
 
         #l2m attention
-        n_embs_l = self.l2n_attn_layer(x = [l_embs, n_embs], edge_index = l2n_edge_index, edge_attr = l2n_edge_attr_embs)         #[(N1,...,Nb)*H*K,D]
+        #n_embs_l = self.l2n_attn_layer(x = [l_embs, n_embs], edge_index = l2n_edge_index, edge_attr = l2n_edge_attr_embs)         #[(N1,...,Nb)*H*K,D]
 
-        n_embs = n_embs_t + n_embs_l
+        n_embs = n_embs_t #+ n_embs_l
         n_embs = n_embs.reshape(num_all_agent, self.num_historical_steps, self.num_modes, self.hidden_dim).transpose(0,1).reshape(-1,self.hidden_dim)       #[H*(N1,...,Nb)*K,D]
         #moda attention  
         for i in range(self.num_attn_layers):
             #m2m_a
             n_embs = n_embs.reshape(self.num_historical_steps, num_all_agent, self.num_modes, self.hidden_dim).transpose(1,2).reshape(-1, self.hidden_dim)  #[H*K*(N1,...,Nb),D]
-            n_embs = self.n2n_a_attn_layers[i](x = n_embs, edge_index = n2n_a_edge_index, edge_attr = n2n_a_edge_attr_embs)
+            #n_embs = self.n2n_a_attn_layers[i](x = n_embs, edge_index = n2n_a_edge_index, edge_attr = n2n_a_edge_attr_embs)
             #m2m_h
             n_embs = n_embs.reshape(self.num_historical_steps, self.num_modes, num_all_agent, self.hidden_dim).permute(1,2,0,3).reshape(-1, self.hidden_dim)  #[K*(N1,...,Nb)*H,D]
             n_embs = self.n2n_h_attn_layers[i](x = n_embs, edge_index = n2n_h_edge_index, edge_attr = n2n_h_edge_attr_embs)
@@ -629,23 +598,24 @@ class MapEncoder(nn.Module):
 
     def forward(self, data) -> torch.Tensor:
         #embedding
-        c_length = data['centerline']['length']
+        print(data.keys())
+        c_length = data['centerline'][0]['length']
         c_embs = self.c_emb_layer(input=c_length.unsqueeze(-1))        #[(C1,...,Cb),D]
 
-        l_length = data['lane']['length']
-        l_is_intersection = data['lane']['is_intersection']
-        l_turn_direction = data['lane']['turn_direction']
-        l_traffic_control = data['lane']['traffic_control']
+        l_length = data['lane'][0]['length']
+        l_is_intersection = data['lane'][0]['is_intersection']
+        l_turn_direction = data['lane'][0]['turn_direction']
+        l_traffic_control = data['lane'][0]['traffic_control']
         l_input = torch.stack([l_length, l_is_intersection, l_turn_direction, l_traffic_control], dim=-1)        #[(M1,...,Mb),4]
         l_embs = self.l_emb_layer(input=l_input)                      #[(M1,...,Mb),D]
 
         #edge
         #c2l
-        c2l_position_c = data['centerline']['position']             #[(C1,...,Cb),2]
-        c2l_position_l = data['lane']['position']                   #[(M1,...,Mb),2]
-        c2l_heading_c = data['centerline']['heading']               #[(C1,...,Cb)]
-        c2l_heading_l = data['lane']['heading']                     #[(M1,...,Mb)]
-        c2l_edge_index = data['centerline', 'lane']['centerline_to_lane_edge_index']    #[2,(C1,...,Cb)]
+        c2l_position_c = data['centerline'][0]['position']             #[(C1,...,Cb),2]
+        c2l_position_l = data['lane'][0]['position']                   #[(M1,...,Mb),2]
+        c2l_heading_c = data['centerline'][0]['heading']               #[(C1,...,Cb)]
+        c2l_heading_l = data['lane'][0]['heading']                     #[(M1,...,Mb)]
+        c2l_edge_index = data["('centerline', 'lane')"][0]['centerline_to_lane_edge_index']    #[2,(C1,...,Cb)]
         c2l_edge_vector = transform_point_to_local_coordinate(c2l_position_c[c2l_edge_index[0]], c2l_position_l[c2l_edge_index[1]], c2l_heading_l[c2l_edge_index[1]])
         c2l_edge_attr_length, c2l_edge_attr_theta = compute_angles_lengths_2D(c2l_edge_vector)
         c2l_edge_attr_heading = wrap_angle(c2l_heading_c[c2l_edge_index[0]] - c2l_heading_l[c2l_edge_index[1]])
@@ -653,20 +623,20 @@ class MapEncoder(nn.Module):
         c2l_edge_attr_embs = self.c2l_emb_layer(input = c2l_edge_attr_input)
 
         #l2l
-        l2l_position = data['lane']['position']                     #[(M1,...,Mb),2]
-        l2l_heading = data['lane']['heading']                       #[(M1,...,Mb)]
+        l2l_position = data['lane'][0]['position']                     #[(M1,...,Mb),2]
+        l2l_heading = data['lane'][0]['heading']                       #[(M1,...,Mb)]
         l2l_edge_index = []
         l2l_edge_attr_type = []
         l2l_edge_attr_hop = []
         
-        l2l_adjacent_edge_index = data['lane', 'lane']['adjacent_edge_index']
+        l2l_adjacent_edge_index = data["('lane', 'lane')"][0]['adjacent_edge_index']
         num_adjacent_edges = l2l_adjacent_edge_index.size(1)
         l2l_edge_index.append(l2l_adjacent_edge_index)
         l2l_edge_attr_type.append(F.one_hot(torch.tensor(self._l2l_edge_type.index('adjacent')), num_classes=len(self._l2l_edge_type)).to(l2l_adjacent_edge_index.device).repeat(num_adjacent_edges, 1))
         l2l_edge_attr_hop.append(torch.ones(num_adjacent_edges, device=l2l_adjacent_edge_index.device))
 
-        num_lanes = data['lane']['num_nodes']
-        l2l_predecessor_edge_index = data['lane', 'lane']['predecessor_edge_index']
+        num_lanes = data['lane'][0]['num_nodes']
+        l2l_predecessor_edge_index = data["('lane', 'lane')"][0]['predecessor_edge_index']
         l2l_predecessor_edge_index_all = generate_reachable_matrix(l2l_predecessor_edge_index, self.num_hops, num_lanes)
         for i in range(self.num_hops):
             num_edges_now = l2l_predecessor_edge_index_all[i].size(1)
@@ -674,7 +644,7 @@ class MapEncoder(nn.Module):
             l2l_edge_attr_type.append(F.one_hot(torch.tensor(self._l2l_edge_type.index('predecessor')), num_classes=len(self._l2l_edge_type)).to(l2l_predecessor_edge_index.device).repeat(num_edges_now, 1))
             l2l_edge_attr_hop.append((i + 1) * torch.ones(num_edges_now, device=l2l_predecessor_edge_index.device))
         
-        l2l_successor_edge_index = data['lane', 'lane']['successor_edge_index']
+        l2l_successor_edge_index = data["('lane', 'lane')"][0]['successor_edge_index']
         l2l_successor_edge_index_all = generate_reachable_matrix(l2l_successor_edge_index, self.num_hops, num_lanes)
         for i in range(self.num_hops):
             num_edges_now = l2l_successor_edge_index_all[i].size(1)
@@ -834,7 +804,7 @@ class HPNet(BaseModel):
             num_heads=self.num_heads,
             dropout=self.dropout
         )
-        self.EnhancedMapEncoder = MapEncoder(
+        self.MapEncoder = MapEncoder(
             hidden_dim=self.hidden_dim,
             num_hops=self.num_hops,
             num_heads=self.num_heads,
@@ -853,18 +823,7 @@ class HPNet(BaseModel):
         self.test_prob_output = dict()
 
     def forward(self, data):
-        data=data['input_dict']
-        for key, value in data.items():
-            if isinstance(value, torch.Tensor):
-                data[key] = value.numpy().tolist()
-            if isinstance(value, np.ndarray):
-                data[key] = value.tolist()
-
-        # Save the dictionary to a JSON file
-        with open('data.json', 'w') as file:
-            json.dump(data, file)
-
-        lane_embs = MapEncoder(data=data)
+        lane_embs = self.MapEncoder(data=data)
         pred = self.Backbone(data=data, l_embs=lane_embs)
         return pred
 
